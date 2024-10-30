@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twitch 數據統計工具</title>
+</head>
+
+<style>
+    /* 基本樣式 */
+    .title {
+        text-align: center;
+    }
+
+    body {
+        margin: 0;
+        padding: 0 0 50px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background-color: rgba(240, 206, 219, 0.6);
+    }
+
+    button {
+        margin-right: 25px;
+        width: 120px;
+        height: 50px;
+        background-color: #D4EDFF;
+        border: 1px solid black;
+        border-radius: 6px;
+        font-size: 16px;
+    }
+
+    .container {
+        width: 90%;
+    }
+
+    .table-container {
+        width: 60%;
+        margin-top: 20px;
+        display: none;
+    }
+
+    table {
+        width: 100%;
+        min-width: 400px;
+        border-collapse: collapse;
+        margin: 0 auto;
+    }
+
+    th,
+    td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: center;
+    }
+
+    th {
+        background-color: #363b4e;
+        color: #D4EDFF;
+    }
+
+    tr:nth-child(odd) {
+        background-color: #D4EDFF;
+    }
+
+    tr:nth-child(even) {
+        background-color: #ccccff;
+    }
+</style>
+
+<body>
+    <div class="container">
+        <h1 class="title">
+            Twitch 數據統計工具 By 嘯天
+            <span style="color: gray;font-size: 32px;margin: 0;">
+                Version:1.1.0
+            </span>
+        </h1>
+        <textarea id="log-input" rows="3"
+            style="text-align: center;font-size: 18px; width: 100%; color: rgb(160, 160, 160);"
+            placeholder="請輸入紀錄"></textarea>
+    </div>
+
+    <br>
+    <div style="display: flex;">
+        <button onclick="calculate()">開始統計</button>
+        <button onclick="exportData()">匯出數據</button>
+        <input type="file" id="fileInput" accept=".json" onchange="importData()" style="display:none;">
+        <button onclick="document.getElementById('fileInput').click()">匯入數據</button>
+    </div>
+
+
+    <ul style="list-style: none; display: flex; justify-content: space-between; width: 40%;">
+        <li>
+            <h2 onclick="showTable('giftAndSingularity')" style="cursor: pointer;">贈定與小奇點總數</h2>
+        </li>
+        <li>
+            <h2 onclick="showTable('subscription')" style="cursor: pointer;">自主訂閱</h2>
+        </li>
+        <li>
+            <h2 onclick="showTable('follow')" style="cursor: pointer;">新追隨</h2>
+        </li>
+    </ul>
+
+    <div id="giftAndSingularity" class="table-container" style="display: block;">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>贈定總數</th>
+                    <th>小奇點總數</th>
+                </tr>
+            </thead>
+            <tbody id="giftAndSingularityBody"></tbody>
+        </table>
+    </div>
+
+    <div id="subscription" class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>自主訂閱</th>
+                </tr>
+            </thead>
+            <tbody id="subscriptionBody"></tbody>
+        </table>
+    </div>
+
+    <div id="follow" class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>新追隨</th>
+                </tr>
+            </thead>
+            <tbody id="followBody"></tbody>
+        </table>
+    </div>
+
+    <script>
+        let results = {};
+        let earliestDateTime = null;
+        let latestDateTime = null;
+        let currentDate = '';
+
+        function showTable(tableId) {
+            document.querySelectorAll('.table-container').forEach(table => table.style.display = 'none');
+            document.getElementById(tableId).style.display = 'block';
+        }
+
+        function parseLine(line) {
+            const datePattern = /^(\d{4}\/\d{1,2}\/\d{1,2})$/;
+            const timePattern = /^(\d{2}:\d{2})/;
+
+            const dateMatch = line.match(datePattern);
+            if (dateMatch) {
+                currentDate = dateMatch[1];
+            } else {
+                const timeMatch = line.match(timePattern);
+                if (timeMatch && currentDate) {
+                    const dateTime = new Date(`${currentDate} ${timeMatch[1]}`);
+                    updateDateTimeRange(dateTime);
+                    return dateTime;
+                }
+            }
+            return null;
+        }
+
+        function updateDateTimeRange(dateTime) {
+            if (!earliestDateTime || dateTime < earliestDateTime) earliestDateTime = dateTime;
+            if (!latestDateTime || dateTime > latestDateTime) latestDateTime = dateTime;
+        }
+
+        function calculate() {
+            const text = document.getElementById('log-input').value;
+            const lines = text.split('\n');
+            currentDate = '';
+
+            const patterns = {
+                gift: /感謝 (\S+) 的贈送 (\d+) 個訂閱/,
+                singularity: /感謝 (\S+) 的 (\d+) 個小奇點/,
+                subscription: /感謝 (\S+) 的訂閱/,
+                follow: /感謝 (\S+) 成為心結/
+            };
+
+            lines.forEach(line => {
+                const dateTime = parseLine(line);
+
+                for (const [key, pattern] of Object.entries(patterns)) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        const id = match[1];
+                        const number = parseInt(match[2] || 1, 10);
+                        if (!results[id]) results[id] = { gift: 0, singularity: 0, subscription: 0, follow: 0 };
+                        results[id][key] += number;
+                    }
+                }
+            });
+
+            populateTable('giftAndSingularityBody', results, ['gift', 'singularity']);
+            populateTable('subscriptionBody', results, ['subscription']);
+            populateTable('followBody', results, ['follow']);
+        }
+
+        function populateTable(bodyId, data, fields) {
+            const body = document.getElementById(bodyId);
+            body.innerHTML = '';
+            Object.entries(data).forEach(([id, values]) => {
+                if (fields.every(field => values[field] === 0)) return;
+                const row = document.createElement('tr');
+                row.innerHTML = `<td>${id}</td>${fields.map(field => `<td>${values[field]}</td>`).join('')}`;
+                body.appendChild(row);
+            });
+        }
+
+        function exportData() {
+            const startDateTime = formatDateTime(earliestDateTime);
+            const endDateTime = formatDateTime(latestDateTime);
+            const fileName = `${startDateTime}至${endDateTime}的數據統計.json`;
+
+            const dataStr = JSON.stringify(results, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function formatDateTime(dateTime) {
+            if (!dateTime) return '未知';
+            return `${dateTime.getFullYear()}_${dateTime.getMonth() + 1}_${dateTime.getDate()}-${String(dateTime.getHours()).padStart(2, '0')}.${String(dateTime.getMinutes()).padStart(2, '0')}`;
+        }
+
+        function importData() {
+            const file = document.getElementById('fileInput').files[0];
+            const reader = new FileReader();
+            reader.onload = event => {
+                const importedData = JSON.parse(event.target.result);
+                mergeResults(importedData);
+                populateTable('giftAndSingularityBody', results, ['gift', 'singularity']);
+                populateTable('subscriptionBody', results, ['subscription']);
+                populateTable('followBody', results, ['follow']);
+            };
+            reader.readAsText(file);
+        }
+
+        function mergeResults(importedData) {
+            for (const [id, data] of Object.entries(importedData)) {
+                if (!results[id]) results[id] = { gift: 0, singularity: 0, subscription: 0, follow: 0 };
+                for (const key in data) {
+                    results[id][key] += data[key];
+                }
+            }
+        }
+
+    </script>
+</body>
+
+</html>

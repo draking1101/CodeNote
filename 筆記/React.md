@@ -9,7 +9,10 @@
     *   ```yaml
         npm start -- --reset-cache    
         ```
-
+  * 打包成靜態檔案( 會跑出```build資料夾``` )
+    * ```bash
+      npm run build
+      ```
 # <span style='color:#4ea5da'>圖片及CSS引入方法</span>
   * CSS
     *   ```yaml
